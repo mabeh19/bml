@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf8"?>
+<protocol name="Foo">
+  <id name="CommandCode" type="u16">
+    <entry name="Foo1" value="1">
+      <field name="Length" type="u32"/>
+      <field name="Name" type="u8" length="Length"/>
+    </entry>
+    <entry name="Foo2" value="2"/>
+  </id>
+
+  <packet>
+    <marker type="u8" length="4">
+      0xA, 0xB, 0xC, 0xD
+    </marker>
+    <header>
+      <field name="Size" type="u32"/>
+      <field name="CommandCode" type="CommandCode"/>
+      <field name="MessageID" type="u32"/>
+    </header>
+    <body>
+      <field name="Data" dependsOn="CommandCode"/>
+    </body>
+  </packet>
+</protocol>

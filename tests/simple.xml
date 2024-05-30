@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf8"?>
+<protocol name="Simple">
+  <packet>
+    <marker type="u32">
+      0x12345678
+    </marker>
+
+    <header>
+      <field name="Size" type="u32"/>
+      <field name="Code" type="u16"/>
+    </header>
+    <body>
+      <field name="Data" type="u64"/>
+    </body>
+  </packet>
+</protocol>
