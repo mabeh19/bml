@@ -56,7 +56,9 @@ foo :: proc()
 ```
 
 # BML Grammar
-The overall structure of a BML protocol consists of a series of custom types, a series of IDs and a packet definition. The packet definition describes the actual payload.
+The overall structure of a BML protocol consists of a series of custom types, a series of IDs and a packet definition. The packet definition describes the actual payload. 
+
+For examples, look in the <a href="./demos">demos folder</a>.
 
 ## Packet Definition
 The packet definition consists of a marker, a header as well as a body.
