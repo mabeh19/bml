@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf8"?>
+
+<protocol name="CustomTypes">
+  <type name="StringLength" type="u32"/>
+  <type name="String">
+    <field name="Length" type="StringLength"/>
+    <field name="Text" type="u8" length="Length"/>
+  </type>
+
+  <packet>
+    <marker type="u8" length="4">
+      0x1, 0x2, 0x3, 04
+    </marker>
+
+    <header/> <!-- empty header -->
+
+    <body>
+      <field name="FirstName" type="String"/>
+      <field name="MiddleName" type="String"/>
+      <field name="LastName" type="String"/>
+    </body>
+  </packet>
+</protocol>

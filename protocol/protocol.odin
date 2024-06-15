@@ -6,6 +6,7 @@ import "core:strconv"
 import "core:io"
 import "core:strings"
 import "core:mem"
+import "core:slice"
 
 import "../builtin_types"
 import "../element"
@@ -15,11 +16,12 @@ UNKNOWN_NAME :: "??????"
 
 Protocol :: struct {
     name: string,
+    endianness: element.Endianness,
     custom_types: map[string]element.Type,
     ids: map[string]element.ID,
     marker: element.Marker,
-    header: []element.Field,
-    body: []element.Field
+    header: element.Fields,
+    body: element.Fields
 }
 
 
@@ -36,10 +38,6 @@ parse :: proc(path: string) -> (p: Protocol, ok: bool)
     defer strings.builder_destroy(&buf)
     w := strings.to_writer(&buf)
 
-    xml.print(w, d)
-    tree := strings.to_string(buf)
-    fmt.println(tree)
-
     return parse_protocol(d)
 }
 
@@ -52,8 +50,11 @@ parse_protocol :: proc(doc: ^xml.Document) -> (p: Protocol, ok: bool)
     }
 
     prot_name, prot_name_ok := xml.find_attribute_val_by_key(doc, 0, "name")
+    prot_endi, prot_endi_ok := xml.find_attribute_val_by_key(doc, 0, "endianness")
 
     p.name = prot_name_ok ? prot_name : UNKNOWN_NAME
+    p.endianness = prot_endi_ok ? to_endian(prot_endi) : .LITTLE
+    parse_custom_types(&p, doc, 0)
     p.ids = parse_ids(&p, doc, 0)
 
     packet, packet_ok := xml.find_child_by_ident(doc, 0, "packet")
@@ -82,7 +83,7 @@ parse_ids :: proc(p: ^Protocol, doc: ^xml.Document, p_id: u32) -> map[string]ele
             continue
         }
 
-        type, type_ok := builtin_types.get(backingType)
+        type, type_ok := builtin_types.get(backingType, p.endianness)
         if !type_ok {
             fmt.printfln("Backing type `%v` is invalid. Base type expected", type)
             continue
@@ -98,6 +99,35 @@ parse_ids :: proc(p: ^Protocol, doc: ^xml.Document, p_id: u32) -> map[string]ele
     } 
 
     return ids
+}
+
+@(private)
+parse_custom_types :: proc(p: ^Protocol, doc: ^xml.Document, p_id: u32)
+{
+    for i in 0 ..< max(int) {
+        ctype_id, ctype_id_ok := xml.find_child_by_ident(doc, p_id, "type", i)
+        ctype_name, ctype_name_ok := xml.find_attribute_val_by_key(doc, ctype_id, "name")
+
+        if !ctype_id_ok { break }
+
+        if !ctype_name_ok {
+            fmt.printfln("No name found for custom type")
+            break
+        }
+
+        if fields := parse_fields(p, doc, ctype_id); len(fields) > 0 {
+            // fields alias
+            // prepend name of custom type to all fields
+            p.custom_types[ctype_name] = fields
+        }
+        else {
+            // type alias
+            ctype, ctype_ok := xml.find_attribute_val_by_key(doc, ctype_id, "type")
+            if type, type_name_ok := get_type(p, ctype); type_name_ok {
+                p.custom_types[ctype_name] = type
+            }
+        }
+    }
 }
 
 @(private)
@@ -269,6 +299,26 @@ parse_field :: proc(p: ^Protocol, doc: ^xml.Document, field_id: u32, fields: []e
             fmt.printfln("%v: invalid size specified `%v`", fname, fsize)
             return {}, false
         }
+
+        if fields, is_fields := type.(element.Fields); is_fields {
+            fields := slice.clone(fields)
+            for &field in fields {
+                full_name := [?]string{
+                    fname,
+                    field.name,
+                }
+                field.name = strings.join(full_name[:], "_")
+                if len, len_is_ref := field.length.(string); len_is_ref {
+                    full_name := [?]string{
+                        fname,
+                        len,
+                    }
+                    field.length = strings.join(full_name[:], "_")
+                }
+            }
+
+            type = fields
+        }
     }
     else if fdepends_found {
         if id, id_ok := p.ids[fdepends]; !id_ok {
@@ -310,7 +360,7 @@ get_type :: proc(p: ^Protocol, type: string) -> (t: element.Type, ok: bool)
     id_type, id_type_ok := p.ids[type]
     if id_type_ok { return id_type, true }
 
-    return builtin_types.get(type)
+    return builtin_types.get(type, p.endianness)
 }
 
 @(private)
@@ -321,6 +371,12 @@ type_size :: proc(p: ^Protocol, type: ^element.Type) -> int
         return t.backingType.size
     case element.BaseType:
         return t.size
+    case element.Fields:
+        total_size := 0
+        for &f in t {
+            total_size += type_size(p, &f.type)
+        }
+        return total_size
     }
 
     return 0
@@ -361,10 +417,9 @@ parse_size :: proc(p: ^Protocol, type: ^element.Type, fsize: string, fsize_found
 parse_data :: proc(s: string, length: int, type: ^element.Type) -> (d: []byte, ok: bool)
 {
     switch t in type {
-    case element.ID:
-        return {}, false
     case element.BaseType:
         eles := strings.split(s, ",")
+        defer delete(eles)
         if len(eles) > length {
             eles = eles[:length]
         }
@@ -375,6 +430,8 @@ parse_data :: proc(s: string, length: int, type: ^element.Type) -> (d: []byte, o
         }
 
         return dat[:], true
+    case element.Fields, element.ID:
+        return {}, false
     }
 
     return {}, false
@@ -383,24 +440,36 @@ parse_data :: proc(s: string, length: int, type: ^element.Type) -> (d: []byte, o
 @(private)
 parse_type :: proc(type: typeid, s: string) -> ([]byte, bool)
 {
-    s := strings.trim(s, " \n")
+    s := strings.trim(s, " \n\t")
     switch type {
     case u8:
         return uint_to_bits(u8, s)
     case i8:
         return int_to_bits(i8, s)
-    case u16:
-        return uint_to_bits(u16, s)
-    case i16:
-        return int_to_bits(i16, s)
-    case u32:
-        return uint_to_bits(u32, s)
-    case i32:
-        return int_to_bits(i32, s)
-    case u64:
-        return uint_to_bits(u64, s)
-    case i64:
-        return int_to_bits(i64, s)
+    case u16le:
+        return uint_to_bits(u16le, s)
+    case i16le:
+        return int_to_bits(i16le, s)
+    case u32le:
+        return uint_to_bits(u32le, s)
+    case i32le:
+        return int_to_bits(i32le, s)
+    case u64le:
+        return uint_to_bits(u64le, s)
+    case i64le:
+        return int_to_bits(i64le, s)
+    case u16be:
+        return uint_to_bits(u16be, s)
+    case i16be:
+        return int_to_bits(i16be, s)
+    case u32be:
+        return uint_to_bits(u32be, s)
+    case i32be:
+        return int_to_bits(i32be, s)
+    case u64be:
+        return uint_to_bits(u64be, s)
+    case i64be:
+        return int_to_bits(i64be, s)
     case:
         return {}, false
     }
@@ -422,3 +491,15 @@ uint_to_bits :: proc($T: typeid, s: string) -> (dat: []byte, ok: bool)
     return mem.ptr_to_bytes(i), true
 }
 
+@(private)
+to_endian :: proc(s: string) -> element.Endianness
+{
+    switch strings.to_lower(s) {
+    case "little":
+        return .LITTLE
+    case "big":
+        return .BIG
+    case:
+        return .LITTLE
+    }
+}

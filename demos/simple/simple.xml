@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf8"?>
-<protocol name="Simple">
+<protocol name="Simple" endianness="Big">
   <packet>
     <marker type="u32">
       0x12345678

@@ -5,8 +5,9 @@ import "core:mem"
 import "core:mem/virtual"
 import "core:strings"
 
-import "protocol"
-import "parser"
+import "../../protocol"
+import "../../parser"
+import "../../emitter"
 
 CommandCode :: enum u16 {
     FOO_1 = 1,
@@ -16,7 +17,8 @@ CommandCode :: enum u16 {
 FooData :: struct #raw_union {
     foo1: struct #packed {
             length: u32,
-            name: [20]u8
+            name: [5]u8,
+            value: f32,
         },
     foo2: struct #packed {}
 }
@@ -30,9 +32,10 @@ Foo :: struct #packed {
     messageId: u32,
 
     // body
-    data: FooData
-}
+    data: FooData,
 
+    checksum: u32,
+}
 
 
 main :: proc() 
@@ -40,11 +43,12 @@ main :: proc()
     arena := virtual.Arena{}
     arena_alloc := virtual.arena_allocator(&arena)
     context.allocator = arena_alloc
-    bml, ok := protocol.parse("tests/foo.xml")
+    defer virtual.arena_destroy(&arena)
+    bml, ok := protocol.parse("dependant_types.xml")
 
     if ok {
-        fmt.println("Protocol: ", bml)
-        msg := "Hello there!"
+        fmt.println("C header: ", emitter.emit_c(&bml))
+        msg := "Hello"
 
         foo := Foo {
             marker = [?]u8{0xA, 0xB, 0xC, 0xD},
@@ -55,19 +59,25 @@ main :: proc()
                 foo1 = {
                     length = u32(len(msg)),
                     name = {},
+                    value = 1.2345,
                 },
             },
+            checksum = 4321,
         }
 
-        mem.copy(raw_data(foo.data.foo1.name[:]), raw_data(msg), len(msg))
+        bytes := make([]u8, 300)
+        mem.copy(raw_data(bytes[100:]), raw_data(mem.ptr_to_bytes(&foo)), size_of(Foo))
 
-        c, c_ok := parser.parse(&bml, mem.ptr_to_bytes(&foo))
+        packet, c_ok := parser.parse(&bml, bytes)
 
         if c_ok {
-            for d in c {
+            fmt.printfln("Marker found at %v, size %v", packet.offset, packet.size)
+            for d in packet.data {
                 switch t in d.value {
-                case [^]u8:
-                    fmt.printfln("%v => %v", d.name, strings.string_from_ptr(t, len(msg)))
+                case parser.Array:
+                    memory := make([dynamic]u8, t.len)
+                    mem.copy(raw_data(memory), t.ptr, t.element_size * t.len)
+                    fmt.printfln("%v => %v[%v] @ %v = %v", d.name, t.type, t.len, t.ptr, memory[:])
                 case:
                     fmt.printfln("%v => %v", d.name, d.value)
                 }
@@ -81,7 +91,6 @@ main :: proc()
         fmt.println("Error parsing protocol")
     }
 
-    virtual.arena_destroy(&arena)
 }
 
 

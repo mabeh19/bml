@@ -21,6 +21,8 @@ Field :: struct {
     dependsOn: string,
 }
 
+Fields :: []Field
+
 Marker :: struct {
     type: Type,
     size: int,
@@ -30,8 +32,10 @@ Marker :: struct {
 
 Type :: union {
     ID,
+    Fields,
     BaseType
 }
+
 
 BaseType :: struct {
     name: string,
@@ -42,4 +46,9 @@ BaseType :: struct {
 Value :: union {
     string,
     int
+}
+
+Endianness :: enum {
+    LITTLE,
+    BIG,
 }

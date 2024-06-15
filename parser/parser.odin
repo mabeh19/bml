@@ -8,23 +8,39 @@ import "core:os"
 import "core:mem"
 import "core:slice"
 
+
+Packet :: struct {
+    data:   Content,
+    buffer: rawptr,
+    offset: int,
+    size:   int,
+}
+
+
 Data :: struct {
     name: string,
-    value: any
+    value: any,
+}
+
+Array :: struct {
+    ptr: rawptr,
+    len: int,
+    element_size: int,
+    type: typeid,
 }
 
 Content :: []Data
 
 parse :: proc { parse_from_file, parse_from_protocol, parse_data }
 
-parse_from_protocol :: proc(p: ^proto.Protocol, file: string) -> Content
+parse_from_protocol :: proc(p: ^proto.Protocol, file: string) -> (packet: Packet, ok: bool)
 {
-    c := Content{}
+    data := os.read_entire_file_from_filename(file) or_return
 
-    return c
+    return parse(p, data)
 }
 
-parse_from_file :: proc(proto_path: string, file: string) -> (c: Content, ok: bool)
+parse_from_file :: proc(proto_path: string, file: string) -> (packet: Packet, ok: bool)
 {
     p, p_ok := proto.parse(proto_path)
     if !p_ok {
@@ -41,7 +57,7 @@ parse_from_file :: proc(proto_path: string, file: string) -> (c: Content, ok: bo
     return parse(&p, data)
 }
 
-parse_data :: proc(p: ^proto.Protocol, data: []byte) -> (c: Content, ok: bool)
+parse_data :: proc(p: ^proto.Protocol, data: []byte) -> (packet: Packet, ok: bool)
 {
     cont := [dynamic]Data{}
     idx := 0
@@ -57,6 +73,7 @@ parse_data :: proc(p: ^proto.Protocol, data: []byte) -> (c: Content, ok: bool)
         }
     }
 
+    packet.offset = idx
     idx += marker_tot_len
 
     header := [dynamic]ele.BaseType{}
@@ -76,7 +93,11 @@ parse_data :: proc(p: ^proto.Protocol, data: []byte) -> (c: Content, ok: bool)
         ok := add_field(p, &cont, &f, data, &idx)
     }
 
-    return cont[:], true
+    packet.data = cont[:]
+    packet.size = idx - packet.offset
+    packet.buffer = raw_data(data)
+
+    return packet, true
 }
 
 print :: proc(c: Content)
@@ -93,6 +114,10 @@ add_field :: proc(p: ^proto.Protocol, c: ^[dynamic]Data, f: ^ele.Field, data: []
     ok := true
     d := Data{}
     switch t in f.type {
+    case ele.Fields:
+        for &field in t {
+            add_field(p, c, &field, data, offset)
+        }
     case ele.ID: 
         v := mem.make_any(raw_data(data[offset^:]), t.backingType.type)
 
@@ -118,20 +143,25 @@ add_field :: proc(p: ^proto.Protocol, c: ^[dynamic]Data, f: ^ele.Field, data: []
                     return false
                 }
             }
-            arr_size := len * f.size.(int)
-            v := slice.clone(data[offset^:][:arr_size])
+
+            arr := new_clone(Array {
+                ptr             = raw_data(data[offset^:]),
+                len             = len,
+                element_size    = t.size,
+                type            = t.type,
+            })
 
             d = Data {
                 name = f.name,
-                value = v,
+                value = mem.make_any(arr, Array),
             }
 
-            offset^ += arr_size
+            offset^ += len * t.size
         }
         else {
             // is single element
             v := mem.make_any(raw_data(data[offset^:]), t.type)
-            
+
             d = Data {
                 name = f.name,
                 value = v,
@@ -139,7 +169,7 @@ add_field :: proc(p: ^proto.Protocol, c: ^[dynamic]Data, f: ^ele.Field, data: []
 
             offset^ += f.size.(int)
         }
-        
+
     case:
         // type unspecified, must depend on other
         if dep_type, ok := p.ids[f.dependsOn]; ok {
@@ -153,7 +183,7 @@ add_field :: proc(p: ^proto.Protocol, c: ^[dynamic]Data, f: ^ele.Field, data: []
                 }
             }
             else {
-                fmt.printfln("Value lookup failed for %v", f.dependsOn)
+                fmt.printfln("Value lookup failed for %v while parsing field %v", f.dependsOn, f.name)
             }
 
             return ok
@@ -163,7 +193,7 @@ add_field :: proc(p: ^proto.Protocol, c: ^[dynamic]Data, f: ^ele.Field, data: []
         }
     }
 
-    if ok {
+    if ok && d.value != nil {
         append(c, d)
     }
 
@@ -192,15 +222,39 @@ any_to_int :: proc(v: any) -> (int, bool)
         return int(t), true
     case u16:
         return int(t), true
+    case u16le:
+        return int(t), true
+    case u16be:
+        return int(t), true
     case i16:
+        return int(t), true
+    case i16le:
+        return int(t), true
+    case i16be:
         return int(t), true
     case u32:
         return int(t), true
+    case u32le:
+        return int(t), true
+    case u32be:
+        return int(t), true
     case i32:
+        return int(t), true
+    case i32le:
+        return int(t), true
+    case i32be:
         return int(t), true
     case u64:
         return int(t), true
+    case u64le:
+        return int(t), true
+    case u64be:
+        return int(t), true
     case i64:
+        return int(t), true
+    case i64le:
+        return int(t), true
+    case i64be:
         return int(t), true
     case:
         return {}, false
@@ -208,3 +262,4 @@ any_to_int :: proc(v: any) -> (int, bool)
 
     return {}, false
 }
+

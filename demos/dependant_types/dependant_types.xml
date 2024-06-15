@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf8"?>
-<protocol name="Foo">
+<protocol name="Foo" endianness="little">
   <id name="CommandCode" type="u16">
     <entry name="Foo1" value="1">
       <field name="Length" type="u32"/>
       <field name="Name" type="u8" length="Length"/>
+      <field name="Value" type="f32"/>
     </entry>
     <entry name="Foo2" value="2"/>
   </id>
@@ -19,6 +20,7 @@
     </header>
     <body>
       <field name="Data" dependsOn="CommandCode"/>
+      <field name="Checksum" type="u32"/>
     </body>
   </packet>
 </protocol>
