@@ -135,3 +135,11 @@ entry
 - [required] value: int
 
 ## Field
+### Name
+field
+### Attributes
+- [required] name: string
+- [optional] type: BaseType | CustomType | ID
+- [optional] dependsOn: Name of Field
+- [optional] size: int
+- [optional] length: int
