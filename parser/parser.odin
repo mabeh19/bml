@@ -119,14 +119,35 @@ add_field :: proc(p: ^proto.Protocol, c: ^[dynamic]Data, f: ^ele.Field, data: []
             add_field(p, c, &field, data, offset)
         }
     case ele.ID: 
-        v := mem.make_any(raw_data(data[offset^:]), t.backingType.type)
+        if f.dependsOn != "" {
+            // Is dependant on other field look it up and parse the approtriate entry
+            if dep_val, found := lookup_val(c[:], f.dependsOn); found {
+                for e in f.type.(ele.ID).entries {
+                    if dep_val == e.value {
+                        for &field in e.fields {
+                            add_field(p, c, &field, data, offset)
+                        }
+                    }
+                }
+            }
+            else {
+                fmt.printfln("Value lookup failed for %v while parsing field %v", f.dependsOn, f.name)
+                ok = false
+            }
 
-        d = Data {
-            name = f.name,
-            value = v,
+            return ok
         }
+        else {
+            // Is the deciding field
+            v := mem.make_any(raw_data(data[offset^:]), t.backingType.type)
 
-        offset^ += t.backingType.size
+            d = Data {
+                name = f.name,
+                value = v,
+            }
+
+            offset^ += t.backingType.size
+        }
 
     case ele.BaseType:
         if f.length != 1 {
@@ -171,26 +192,7 @@ add_field :: proc(p: ^proto.Protocol, c: ^[dynamic]Data, f: ^ele.Field, data: []
         }
 
     case:
-        // type unspecified, must depend on other
-        if dep_type, ok := p.ids[f.dependsOn]; ok {
-            if dep_val, found := lookup_val(c[:], f.dependsOn); found {
-                for e in dep_type.entries {
-                    if dep_val == e.value {
-                        for &field in e.fields {
-                            add_field(p, c, &field, data, offset)
-                        }
-                    }
-                }
-            }
-            else {
-                fmt.printfln("Value lookup failed for %v while parsing field %v", f.dependsOn, f.name)
-            }
-
-            return ok
-        }
-        else {
-            ok = false
-        }
+        ok = false
     }
 
     if ok && d.value != nil {

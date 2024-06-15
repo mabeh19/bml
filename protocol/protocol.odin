@@ -321,10 +321,30 @@ parse_field :: proc(p: ^Protocol, doc: ^xml.Document, field_id: u32, fields: []e
         }
     }
     else if fdepends_found {
-        if id, id_ok := p.ids[fdepends]; !id_ok {
+        dependantType : element.Type = nil
+        found := false
+        for f in p.header {
+            if f.name == fdepends {
+                found = true
+                dependantType = f.type
+                break
+            }
+        }
+        if !found {
+            for f in p.body {
+                if f.name == fdepends {
+                    found = true
+                    dependantType = f.type
+                    break
+                }
+            }
+        }
+        if !found {
             fmt.printfln("%v: unknown depencency `%v`", fname, fdepends)
             return {}, false
         }
+
+        type = dependantType
     }
     else {
         fmt.printfln("%v: Missing either type or type dependency", fname)

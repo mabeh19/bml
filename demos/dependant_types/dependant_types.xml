@@ -15,11 +15,11 @@
     </marker>
     <header>
       <field name="Size" type="u32"/>
-      <field name="CommandCode" type="CommandCode"/>
+      <field name="Command" type="CommandCode"/>
       <field name="MessageID" type="u32"/>
     </header>
     <body>
-      <field name="Data" dependsOn="CommandCode"/>
+      <field name="Data" dependsOn="Command"/>
       <field name="Checksum" type="u32"/>
     </body>
   </packet>

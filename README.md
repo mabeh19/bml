@@ -55,4 +55,83 @@ foo :: proc()
 }
 ```
 
+# BML Grammar
+The overall structure of a BML protocol consists of a series of custom types, a series of IDs and a packet definition. The packet definition describes the actual payload.
 
+## Packet Definition
+The packet definition consists of a marker, a header as well as a body.
+
+### Marker
+#### Name
+marker
+#### Attributes
+- [required] type: BaseType
+- [optional] length: int
+- [optional] size: int
+#### Value
+Comma-separated list of values. May be provided in different bases using the following prefixes:
+- Hexadecimal: 0x
+- Binary: 0b
+- Octal: 0o
+
+### Header
+#### Name
+header
+#### Attributes
+None
+#### Value
+List of fields in header
+
+### Body
+#### Name
+body
+#### Attributes
+None
+#### Value
+List of fields in body
+
+
+## Base types
+| Type  | Size  |
+|  ---  |  ---  |
+| u8    | 1     |
+| i8    | 1     |
+| u16   | 2     |
+| i16   | 2     |
+| u32   | 4     |
+| i32   | 4     |
+| u64   | 8     |
+| i64   | 8     |
+| f16   | 2     |
+| f32   | 4     |
+| f64   | 8     |
+
+
+## ID
+IDs correlate an integer value to set of fields. A field can be dependant on another field, the type of which should be an ID.
+### Name
+id
+### Attributes
+- [required] name: string
+- [required] type: BaseType
+### Value
+List of entries
+
+## Custom Type
+Custom Types come in two flavors: type aliases and field lists.
+### Name
+type
+### Attributes
+- [required] name: string
+- [optional] type: BaseType
+### Value
+List of fields
+
+## Entry
+### Name
+entry
+### Attributes
+- [required] name: string
+- [required] value: int
+
+## Field
