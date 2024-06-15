@@ -66,6 +66,7 @@ main :: proc()
         }
 
         bytes := make([]u8, 300)
+        mem.copy(raw_data(&foo.data.foo1.name), raw_data(msg), len(msg))
         mem.copy(raw_data(bytes[100:]), raw_data(mem.ptr_to_bytes(&foo)), size_of(Foo))
 
         packet, c_ok := parser.parse(&bml, bytes)
